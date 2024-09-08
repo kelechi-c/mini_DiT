@@ -1,4 +1,5 @@
 import torch
+import math
 from torch import nn
 from timm.models.vision_transformer import Attention, Mlp
 from ..utils import modulate
@@ -55,7 +56,7 @@ class DiTBlock(nn.Module):
 
 
 # final linear layer for diffusion transformer
-class FInalMlp(nn.Module):
+class FinalMlp(nn.Module):
     def __init__(self, embed_dim, patch_size, out_channels):
         super().__init__()
         self.layer_norm = nn.LayerNorm(embed_dim)  # layer nrmalization
@@ -76,3 +77,37 @@ class FInalMlp(nn.Module):
         x = self.linear(x)
 
         return x
+
+
+class TimestepEmbedder(nn.Module):
+    def __init__(self, freq_embed_size=256, hidden_size=384):
+        super().__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(freq_embed_size, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+        self.freqembed_size = freq_embed_size
+
+    @staticmethod
+    def timestep_embedding(t_step: torch.Tensor, dim: int, max_value: int = 10000):
+        half_dim = dim // 2
+        scale_factor = -math.log(max_value)
+        freqs = scale_factor * torch.arange(start=0, end=half_dim, dtype=torch.float32)
+        freqs = (freqs / half_dim).to(t_step.device)
+        args = t_step[:, None].float() * freqs[None]
+        sincos_embed = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+
+        return (
+            sincos_embed
+            if dim % 2 == 0
+            else torch.cat(
+                [sincos_embed, torch.zeros_like(sincos_embed[:, :1])], dim=-1
+            )
+        )
+
+    def forward(self, t_step):
+        time_freq = self.timestep_embedding(t_step, self.freqembed_size)
+        time_embed = self.linear(time_freq)
+
+        return time_embed
