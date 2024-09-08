@@ -111,3 +111,33 @@ class TimestepEmbedder(nn.Module):
         time_embed = self.linear(time_freq)
 
         return time_embed
+
+
+class LabelEmbedder(nn.Module):
+    def __init__(self, embed_dim=384, num_classes=1000, dropout=0.1):
+        super().__init__()
+        clf_free_guide = True  # for classifier-free guidance.
+        self.use_cfg = clf_free_guide
+        self.num_classes = num_classes
+        self.dropout_p = dropout  # label dropout probability
+
+        # embedding table for labels
+        self.codebook = nn.Embedding(num_classes + clf_free_guide, embed_dim)
+
+    # randomly select labels to drop for cfg
+    def drop_tokens(self, labels: torch.Tensor):
+        # label ids to drop
+        drop_ids = torch.randn(labels.shape[0], device=labels.device) < self.dropout_p
+
+        # select labels tensors, while dropping some off
+        labels = torch.where(drop_ids, self.num_classes, labels)
+
+        return labels
+
+    def forward(self, labels, training=True):
+        if training and self.use_cfg:  # drop labels for cfg and training
+            labels = self.drop_tokens(labels)
+
+        label_embeds = self.codebook(labels)  # get label embeddings
+
+        return label_embeds
