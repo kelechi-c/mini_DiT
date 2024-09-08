@@ -1,12 +1,15 @@
 import torch
 from torch import nn
-from .dit_blocks import DiTBlock, FinalMlp
+from .dit_blocks import DiTBlock, FinalMlp, TimestepEmbedder, LabelEmbedder
 from timm.models.vision_transformer import PatchEmbed
-
-# main diffusion transformer block
+from einops import rearrange
 
 
 class Snowflake_DiT(nn.Module):
+    """
+    complete diffusion transformer fir class-conditioned image generation.
+    """
+
     def __init__(
         self,
         embed_dim=384,
@@ -15,8 +18,6 @@ class Snowflake_DiT(nn.Module):
         patch_size=4,
         channels=4,
         classes=1000,
-        c_dropout=0.1,
-        mlp_ratio=4,
         learn_sigma=True,  # covariance
     ):
         super().__init__()
@@ -40,17 +41,25 @@ class Snowflake_DiT(nn.Module):
         self.patch_count = self.patchify.num_patches
 
         # timstep/class embedding
-        self.time_embedder = None
-        self.class_embedder = None
+        self.time_embedder = TimestepEmbedder()
+        self.class_embedder = LabelEmbedder()
 
         # dit blocks
         dit_blocks = [DiTBlock() for _ in range(num_layers)]
         self.dit_layers = nn.Sequential(*dit_blocks)
 
-        # 'Linear and Reshaoe' block
+        # 'Linear and Reshape' block
         self.final_layer = FinalMlp(
             embed_dim=embed_dim, patch_size=patch_size, out_channels=4
         )
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
 
     def forward(
         self, x_img: torch.Tensor, y_class: torch.Tensor, timestep: torch.Tensor
@@ -67,7 +76,17 @@ class Snowflake_DiT(nn.Module):
         output = self.dit_layers(img_patches, conditioning)
         # output liear projection
         output = self.final_linear(output, conditioning)
+        final_image_latent = self.unpatchify(output)
 
-        pred_noise, covariance = output.chunk(2, dim=1)
+        return final_image_latent  # (n, h, w, 2c)
 
-        return pred_noise, covariance
+    def unpatchify(self, x_patch: torch.Tensor):
+        # patch_size from PatchEmbed
+        p_size = self.image_embedder.patch_size[0]
+
+        # reshape (batch_size, seq_len, [patch, patch, channels]) -> (batch, channels, height, patch_size, width)
+        x = rearrange(x_patch, "n t (p p c) -> n c h p w", p=p_size)
+        # reshape to multiply h/w with patch_size, resulting shape -> (batch, channels, height, width)
+        x_img = rearrange(x, "n c h p w -> n c (h p) (w p)")
+
+        return x_img
