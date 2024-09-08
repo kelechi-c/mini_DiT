@@ -1,15 +1,13 @@
 import torch
 from torch import nn
-from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
-from ..configs import dit_config
-from timm.models.vision_transformer import Attention, PatchEmbed, Mlp
-
-
-sd_vae = AutoencoderKL.from_pretrained(dit_config.vae_id)
+from timm.models.vision_transformer import Attention, Mlp
+from ..utils import modulate
 
 
 class DiTBlock(nn.Module):
     """
+    Diffusion transformer block from the paper.
+    layout =>
     input - layer norm - scale, shift - self_attention -
     concat(w/input) -
     layernorm - scale, shift - pointwise_feedforward - scale -
@@ -56,17 +54,25 @@ class DiTBlock(nn.Module):
         return x
 
 
-# final mlp layer for diffusion transformer
-
-
+# final linear layer for diffusion transformer
 class FInalMlp(nn.Module):
     def __init__(self, embed_dim, patch_size, out_channels):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(embed_dim)
-        self.linear = nn.Linear(embed_dim, patch_size)
-        self.ada_ln = nn.Sequential(
+        self.layer_norm = nn.LayerNorm(embed_dim)  # layer nrmalization
+        self.linear = nn.Linear(  # mlp layer
+            embed_dim, patch_size * patch_size * out_channels, bias=True
+        )
+        self.ada_ln = nn.Sequential(  # adaptive layernorm mlp
             nn.SiLU(), nn.Linear(embed_dim, 2 * embed_dim, bias=True)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, c_class: torch.Tensor) -> torch.Tensor:
+        shift, scale = self.ada_ln(c_class).chunk(
+            2, dim=1
+        )  # shift and scale parameters
+
+        x = self.layer_norm(x)
+        x = modulate(x, shift, scale)  # apply adaLN for the last layer
+        x = self.linear(x)
+
         return x
