@@ -1,5 +1,7 @@
+import einops
 import torch
 import math
+import numpy as np
 from torch import nn
 from timm.models.vision_transformer import Attention, Mlp
 from ..utils import modulate
@@ -141,3 +143,43 @@ class LabelEmbedder(nn.Module):
         label_embeds = self.codebook(labels)  # get label embeddings
 
         return label_embeds
+
+
+# section for fixed sin-cos embeddings,  adapted from official code
+def get_1d_sincos_grid(embed_dim: int, position: np.ndarray):
+    # omega parameter
+    omega = np.arange(embed_dim // 2, dtype=np.float64)
+    omega /= embed_dim / 2
+    omega = 1.0 / (10000**omega)
+    # input position
+    position = position.reshape(-1)
+    output = np.einsum("m, d->md", position, omega)  # matrix multiplication
+    # apply sin/cos operation
+    cos_embed = np.cos(output)
+    sin_embed = np.sin(output)
+
+    sincos_embed = np.concatenate([sin_embed, cos_embed], axis=1)  # concat both sin/cos
+
+    return sincos_embed
+
+
+def get_2d_sincos_from_grid(embed_dim, img_grid):
+    # encode height/width postionswith half of embed_dim for each
+    height_embed = get_1d_sincos_grid(embed_dim // 2, img_grid[0])
+    width_embed = get_1d_sincos_grid(embed_dim // 2, img_grid[1])
+
+    pos_embed = np.concatenate([width_embed, height_embed], axis=-1)  # concatenate both
+
+    return pos_embed
+
+
+def get_2d_sincos_pos_embed(embed_dim, grid_size):
+    # grid_size: grid height/width, both should be equal
+    grid_h = grid_w = np.arange(grid_size, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
+    grid = grid.reshape([2, 1, grid_size, grid_size])
+
+    pos_embed = get_2d_sincos_from_grid(embed_dim, grid)
+
+    return pos_embed

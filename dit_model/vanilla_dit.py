@@ -1,6 +1,12 @@
 import torch
 from torch import nn
-from .dit_blocks import DiTBlock, FinalMlp, TimestepEmbedder, LabelEmbedder
+from .dit_blocks import (
+    DiTBlock,
+    FinalMlp,
+    TimestepEmbedder,
+    LabelEmbedder,
+    get_2d_sincos_pos_embed,
+)
 from timm.models.vision_transformer import PatchEmbed
 from einops import rearrange
 
@@ -86,6 +92,12 @@ class Snowflake_DiT(nn.Module):
             nn.init.constant_(layer.adaLN[-1].weight, 0)
             nn.init.constant_(layer.adaLN[-1].bias, 0)
 
+        # initialize positional encodings
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1], int(self.patch_count**0.5)
+        )
+        self.pos_embed.data.copy_(pos_embed.from_numpy().unsqueeze(0))
+
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.xavier_uniform_(module.weight)
@@ -97,6 +109,8 @@ class Snowflake_DiT(nn.Module):
     ) -> torch.Tensor:
         # patchify images and apply positional encoding
         img_patches = self.image_embedder(x_img)
+        img_patches = img_patches + self.pos_embed  # add positional encodings
+
         time_embed, class_embed = (
             self.time_embedder(timestep),  # timestep
             self.class_embedder(y_class),  # image class conditioning
