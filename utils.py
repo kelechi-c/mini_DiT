@@ -5,6 +5,7 @@ from PIL.Image import Image
 from skimage import io
 import cv2
 import numpy as np
+import gc
 
 
 def modulate(x, shift_value, scale_value):
@@ -12,6 +13,17 @@ def modulate(x, shift_value, scale_value):
     x = x + shift_value.unsqueeze(1)
 
     return x
+
+
+def count_params(model: torch.nn.Module):
+    p_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    return p_count
+
+
+def clear_memory():
+    torch.cuda.empty_cache()
+    gc.collect()
 
 
 def read_image(img_url: Union[str, Image], img_size: int = 512):
