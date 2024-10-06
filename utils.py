@@ -39,3 +39,11 @@ def seed_everything(seed=333):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+# diffusion generation preview
+# latents = get_pred_original_sample(sched, *args)
+# decoded = pipe.image_processor.postprocess(taesd_dec(latents.float()).mul_(2).sub_(1))[0]
+# preview_images.append(decoded)
+# preview_images[0].save("images/preview_images_1.gif", save_all=True, append_images=preview_images[1:], duration=100, loop=0)
+# HTML("<img src=../images/preview_images_1.gif />")
