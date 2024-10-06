@@ -1,4 +1,3 @@
-import einops
 import torch
 import math
 import numpy as np
@@ -95,7 +94,8 @@ class TimestepEmbedder(nn.Module):
     def timestep_embedding(t_step: torch.Tensor, dim: int, max_value: int = 10000):
         half_dim = dim // 2
         scale_factor = -math.log(max_value)
-        freqs = scale_factor * torch.arange(start=0, end=half_dim, dtype=torch.float32)
+        freqs = scale_factor * \
+            torch.arange(start=0, end=half_dim, dtype=torch.float32)
         freqs = (freqs / half_dim).to(t_step.device)
         args = t_step[:, None].float() * freqs[None]
         sincos_embed = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
@@ -129,7 +129,8 @@ class LabelEmbedder(nn.Module):
     # randomly select labels to drop for cfg
     def drop_tokens(self, labels: torch.Tensor):
         # label ids to drop
-        drop_ids = torch.randn(labels.shape[0], device=labels.device) < self.dropout_p
+        drop_ids = torch.randn(
+            labels.shape[0], device=labels.device) < self.dropout_p
 
         # select labels tensors, while dropping some off
         labels = torch.where(drop_ids, self.num_classes, labels)
@@ -158,7 +159,8 @@ def get_1d_sincos_grid(embed_dim: int, position: np.ndarray):
     cos_embed = np.cos(output)
     sin_embed = np.sin(output)
 
-    sincos_embed = np.concatenate([sin_embed, cos_embed], axis=1)  # concat both sin/cos
+    sincos_embed = np.concatenate(
+        [sin_embed, cos_embed], axis=1)  # concat both sin/cos
 
     return sincos_embed
 
@@ -168,7 +170,8 @@ def get_2d_sincos_from_grid(embed_dim, img_grid):
     height_embed = get_1d_sincos_grid(embed_dim // 2, img_grid[0])
     width_embed = get_1d_sincos_grid(embed_dim // 2, img_grid[1])
 
-    pos_embed = np.concatenate([width_embed, height_embed], axis=-1)  # concatenate both
+    pos_embed = np.concatenate(
+        [width_embed, height_embed], axis=-1)  # concatenate both
 
     return pos_embed
 

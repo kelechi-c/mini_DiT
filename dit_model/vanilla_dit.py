@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from torchsummary import summary
+from ..configs import dit_config
 from .dit_blocks import (
     DiTBlock,
     FinalMlp,
@@ -9,6 +11,9 @@ from .dit_blocks import (
 )
 from timm.models.vision_transformer import PatchEmbed
 from einops import rearrange
+from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+
+sd_vae = AutoencoderKL.from_pretrained(dit_config.vae_id)
 
 
 class Snowflake_DiT(nn.Module):
@@ -135,3 +140,7 @@ class Snowflake_DiT(nn.Module):
         x_img = rearrange(x, "n c h p w -> n c (h p) (w p)")
 
         return x_img
+
+
+tiny_dit_model = Snowflake_DiT()
+summary(tiny_dit_model, [(4, 32, 32), 7, 1])  # print model summary
