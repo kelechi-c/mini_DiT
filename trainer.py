@@ -1,4 +1,5 @@
 # pytorch related imports
+from cv2 import startWindowThread
 from jax._src.dtypes import dtype
 import torch
 from accelerate import accelerator
@@ -16,8 +17,10 @@ from ptflops import flops_to_string, get_model_complexity_info
 import re
 import wandb
 import os
-from time import time
 import gc
+from time import time
+from tqdm import tqdm
+from safetensors.torch import save_model
 
 #####
 # get model summary and info
@@ -56,21 +59,9 @@ wandb.watch(dit_model, log_freq=100)
 # training loop
 def trainer(model=dit_model, epochs=train_configs.epochs):
     start_time = time()
-    pass
-
-
-# initilaize wandb
-
-
-if os.path.exists(config.model_outpath) is not True:
-    os.mkdir(config.model_outpath)
-
-output_path = os.path.join(os.getcwd(), config.model_outpath)
-
-
-def training_loop(model=vit, train_loader=train_loader, epochs=epochs, config=config):
     model.train()
     train_loss = 0.0
+    config = train_configs
 
     for epoch in tqdm(range(epochs)):
         optimizer.zero_grad()
@@ -90,22 +81,32 @@ def training_loop(model=vit, train_loader=train_loader, epochs=epochs, config=co
             with torch.autocast(device_type="cuda", dtype=torch.float32):
                 output = model(image)
                 train_loss = criterion(output, label.long())
-                train_loss = train_loss / config.grad_acc_step  # Normalize the loss
+                train_loss = train_loss / config.grad_steps  # Normalize the loss
 
             # Scales loss. Calls backward() on scaled loss to create scaled gradients.
             scaler.scale(train_loss).backward()
 
-            if (x + 1) % config.grad_acc_step == 0:
+            if (x + 1) % config.grad_steps == 0:
                 # Unscales the gradients of optimizer's assigned params in-place
-
                 scaler.step(optimizer)
                 # Updates the scale for next iteration
                 scaler.update()
                 optimizer.zero_grad()
 
             wandb.log({"loss": train_loss})
+        if (epoch % 2) == 0:
+            checkpoint = {
+                "epoch": epoch,
+                "model_state_dict": dit_model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": train_loss,
+            }
 
-        print(f"Epoch {epoch} of {epochs}, train_loss: {train_loss.item():.4f}")
+            torch.save(checkpoint, f"katara_mini_check_{epoch}.pth")
+
+        epoch_time = time() - start_time
+        print(
+            f"Epoch {epoch} of {epochs}, train_loss: {train_loss.item():.4f} in time: {epoch_time:.3f}")
 
         print(f"Epoch @ {epoch} complete!")
 
@@ -114,10 +115,7 @@ def training_loop(model=vit, train_loader=train_loader, epochs=epochs, config=co
 
     save_model(model, config.safetensor_file)
 
-    torch.save(model.state_dict(), f"{config.model_file}"))
-
-
-training_loop()
+    torch.save(model.state_dict(), f"{config.model_file}")
 
 
 print("snowflake, diffusion transformer training complete")
