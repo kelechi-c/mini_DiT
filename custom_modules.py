@@ -1,8 +1,6 @@
 """
 My Custom experimental additions to the paper architecture
-- RoPE(Rotary posiitonal embeddings)
 - SwiGLU [Done]
-- Sparse transformer
 """
 
 from torch.nn import functional as func_nn
@@ -32,11 +30,3 @@ class SwiGLU(nn.Module):
         gated = func_nn.linear(swish_hidden, self.b_param.weight)
 
         return gated
-
-
-class SparseAttention(nn.Module):
-    def __init__(self, embed_dim):
-        self.embed_dim = embed_dim
-
-    def forward(self, x):
-        return x
